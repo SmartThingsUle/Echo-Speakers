@@ -15,11 +15,21 @@ The cookie could expire and you must to get another but I have many days and the
 
 To get the cookie you need to go to alexa.amazon.com, if you are in other country the site will redirect you to your country site.
 
-This is the site from I get the info https://www.gehrig.info/alexa/Alexa.html , is very easy tutorial to get the cookie, we just need the **Domain** : https://alexa.amazon.com or the domain you get in the site, it depends of your country, the  **CSRF** and the **cookie**  , the cookie is too long to app settings, it just support 500 chars, then you need to split into 3.
+This is the site from I get the info https://www.gehrig.info/alexa/Alexa.html , is very easy tutorial to get the cookie, we just need the **Domain** : https://alexa.amazon.com or the domain you get in the site, it depends of your country, the  **CSRF** and the **cookie** 
 
-You can add the parameters obtained from alexa site in the iniSettings() secction of the Echo Connect App Code
+If you have problems to find the beginning and end of the cookie, try to use the site https://incarnate.github.io/curl-to-php , it will parse the curl command into pieces. just be careful to remove the **Cookie:** . from the  beginning if you use the site.
 
-Ready, you can add your devices from the Echo Connect app, I have some Echos and Fabriq speakers, and works fine,  you can tell me if works with others generic devies.
+In my Chrome Browser I use the option copy as Curl(bash) and pasted that info en the parser site.
+
+
+You can add the parameters obtained from alexa site in the iniSettings() secction of the Echo Connect App Code, it have some example how data is , but you must fill with your real info
+
+Ready, you can add your devices from the Echo Connect app, I have some Echos and Fabriq speakers, and works fine.
+
+tell me if works with others alexa third party  devices.
+
+
+https://github.com/SmartThingsUle/Echo-Speakers/tree/master
 
 
   
