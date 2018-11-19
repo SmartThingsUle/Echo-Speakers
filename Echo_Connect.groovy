@@ -33,7 +33,7 @@ def iniSettings(){
     log.trace "state.loadStatus ${state.loadStatus}"
     return dynamicPage(name:"iniSettings", title:"Connect Your Echo devices to SmartThings", nextPage:"chooseDevices", install:false, uninstall: true) {
        section("Echo Remote Credentials") {
-			paragraph "Get your Echo data from https://alexa.amazon.com\r\n\r\nThe cookie data is to long, you must to split it in 3 parts, go to APP settings in IDE to add the info\r\n\r\nTap 'Next' after you have entered the data.\r\n\r\nOnce your request is accepted, SmartThings will scan your Echo devices."
+			paragraph "Get your Echo data from https://alexa.amazon.com\r\n\r\nThe cookie data is to long, you must go to Echo Conect code in IDE and add the Cookie, Domain, CSRF data in the iniSettings() section\r\n\r\nTap 'Next' after you have entered the data.\r\n\r\nOnce your request is accepted, SmartThings will scan your Echo devices."
 		}
     }
 }
@@ -64,7 +64,7 @@ def echoDiscovery() {
     }else{
     	if (state.count)
     	log.trace "state.loadStatus ${state.loadStatus}"
-        def msg = state.count >= 3 ? "The TCP Gateway is not responding, please verify the ip address" : "Please wait while we discover your devices. Discovery can take some minutes or more, so sit back and relax! Select your device below once discovered."
+        def msg = state.count >= 3 ? "The server is not responding, please verify the cookie, domain and csrf data" : "Please wait while we discover your devices. Discovery can take some minutes or more, so sit back and relax! Select your device below once discovered."
         return dynamicPage(name:"chooseDevices", title:"", nextPage:"", refreshInterval:5) {
             section(msg) {}
         }
