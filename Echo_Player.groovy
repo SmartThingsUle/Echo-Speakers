@@ -1,14 +1,24 @@
 /** 
- *  Echo Player v1.0.0
+ *  Echo Player v1.1.0
  *
  *  Author: SmartThings - Ulises Mujica (Ule)
  *
+ *  Search TuneIn Genres added, Like DLNA speaker, you can search Christmas, Jazz, French, etc.  stations
+ *
+ *  playStation(station, genre) it allows to send increments in stations or genres based in your genres settings
+ *  ex playStation(0,0) paly the actual station in current genre
+ *  ex playStation(1,0) paly the next station in current genre
+ *  ex playStation(0,1) paly the station in next genre
+ *  ex playStation(-1,0) paly the previous station in current genre
+ *  ex playStation(0,-1) paly the station in previous genre
  */
+
 
 
 preferences {
 		input(name: "customDelay", type: "enum", title: "Delay before msg (seconds)", options: ["0","1","2","3","4","5"])
 		input(name: "actionsDelay", type: "enum", title: "Delay between actions (seconds)", options: ["0","1","2","3"])
+        input "genres", "text", title: "Multiple Searches, comma separator", required: false, description:"Smooth Jazz,Christmas"
 }
 metadata {
 	// Automatically generated. Make future change here.
@@ -19,7 +29,7 @@ metadata {
 		capability "Sensor"
 		capability "Music Player"
 		capability "Polling"
-        capability "Speech Synthesis"
+        	capability "Speech Synthesis"
 
 		attribute "model", "string"
 		attribute "trackUri", "string"
@@ -46,7 +56,15 @@ metadata {
 		command "playTextAndResume", ["string","json_object","number"]
 		command "setDoNotDisturb", ["string"]
 		command "switchDoNotDisturb"
-        command "speak", ["string"]
+		command "switchBtnMode"
+		command "speak", ["string"]
+		command "searchTuneIn", ["string"]
+		command "playStation", ["number","number"]
+		command "previousStation"
+		command "nextStation"
+		command "previousGenre"
+		command "nextGenre"
+		command "playGenre", ["string"]
 	}
 
 	// Main
@@ -55,29 +73,34 @@ metadata {
 		state "stopped", label:'Stopped', action:"music Player.play", icon:"st.Electronics.electronics16", backgroundColor:"#ffffff"
 		state "paused", label:'Paused', action:"music Player.play", icon:"st.Electronics.electronics16", nextState:"playing", backgroundColor:"#ffffff"
 		state "no_media_present", label:'No Media', icon:"st.Electronics.electronics16", backgroundColor:"#ffffff"
-        state "no_device_present", label:'No Present', icon:"st.Electronics.electronics16", backgroundColor:"#b6b6b4"
+        	state "no_device_present", label:'No Present', icon:"st.Electronics.electronics16", backgroundColor:"#b6b6b4"
 		state "grouped", label:'Grouped', icon:"st.Electronics.electronics16", backgroundColor:"#ffffff"
 	}
 
 	// Row 1
-	standardTile("nextTrack", "device.status", width: 1, height: 1, decoration: "flat") {
-		state "next", label:'', action:"music Player.nextTrack", icon:"st.sonos.next-btn", backgroundColor:"#ffffff"
+	standardTile("nextTrack", "device.btnMode", width: 1, height: 1, decoration: "flat") {
+        state "default", label:'', action:"nextTrack", icon:"st.sonos.next-btn", backgroundColor:"#ffffff",nextState:"default"
+        state "station", label:'Next Station', action:"nextStation", icon:"http://urbansa.com/icons/next-btn@2x.png", backgroundColor:"#ffffff",nextState:"station"
+        state "genre", label:'Next Genre', action:"nextGenre", icon:"http://urbansa.com/icons/next-btn@2x.png", backgroundColor:"#ffffff",nextState:"genre"
 	}
-	standardTile("play", "device.status", width: 1, height: 1, decoration: "flat") {
-		state "default", label:'', action:"music Player.play", icon:"st.sonos.play-btn", nextState:"playing", backgroundColor:"#ffffff"
-		state "grouped", label:'', action:"music Player.play", icon:"st.sonos.play-btn", backgroundColor:"#ffffff"
+	standardTile("play", "device.btnMode", width: 1, height: 1, decoration: "flat") {
+		state "default", label:'', action:"play", icon:"st.sonos.play-btn", nextState:"default", backgroundColor:"#ffffff"
+        state "station", label:'Play Station', action:"playStation", icon:"http://urbansa.com/icons/play-btn@2x.png", nextState:"station", backgroundColor:"#ffffff"
+        state "genre", label:'Play Station', action:"playStation", icon:"http://urbansa.com/icons/play-btn@2x.png", nextState:"genre", backgroundColor:"#ffffff"
 	}
-	standardTile("previousTrack", "device.status", width: 1, height: 1, decoration: "flat") {
-		state "previous", label:'', action:"music Player.previousTrack", icon:"st.sonos.previous-btn", backgroundColor:"#ffffff"
+	standardTile("previousTrack", "device.btnMode", width: 1, height: 1, decoration: "flat") {
+		state "default", label:'', action:"previousTrack", icon:"st.sonos.previous-btn", backgroundColor:"#ffffff",nextState:"default"
+        state "station", label:'Prev Station', action:"previousStation", icon:"http://urbansa.com/icons/previous-btn@2x.png", backgroundColor:"#ffffff",nextState:"station"
+        state "genre", label:'Prev Genre', action:"previousGenre", icon:"http://urbansa.com/icons/previous-btn@2x.png", backgroundColor:"#ffffff",nextState:"genre"
 	}
 
 	// Row 2
-    controlTile("levelSliderControl", "device.level", "slider", height: 1, width: 1, inactiveLabel: false) {
+    	controlTile("levelSliderControl", "device.level", "slider", height: 1, width: 1, inactiveLabel: false) {
 		state "level", action:"tileSetLevel", backgroundColor:"#ffffff"
 	}
 	standardTile("stop", "device.status", width: 1, height: 1, decoration: "flat") {
-		state "default", label:'', action:"music Player.stop", icon:"st.sonos.stop-btn", backgroundColor:"#ffffff"
-		state "grouped", label:'', action:"music Player.stop", icon:"st.sonos.stop-btn", backgroundColor:"#ffffff"
+		state "default", label:'', action:"music Player.pause", icon:"st.sonos.pause-btn", backgroundColor:"#ffffff"
+		state "grouped", label:'', action:"music Player.pause", icon:"st.sonos.pause-btn", backgroundColor:"#ffffff"
 	}
 	standardTile("mute", "device.mute", inactiveLabel: false, decoration: "flat") {
 		state "unmuted", label:"", action:"music Player.mute", icon:"st.custom.sonos.unmuted", backgroundColor:"#ffffff", nextState:"muted"
@@ -109,10 +132,19 @@ metadata {
         state "on_playing", label:"MSG on Stopped", action:"switchDoNotDisturb", icon:"st.alarm.beep.beep",nextState:"off_playing"
         state "off_playing", label:"MSG on Playing", action:"switchDoNotDisturb", icon:"st.alarm.beep.beep",nextState:"off"
 	}
+    standardTile("btnMode", "device.btnMode", width: 1, height: 1, decoration: "flat", canChangeIcon: true) {
+		state "default", label:"Normal", action:"switchBtnMode", icon:"st.Electronics.electronics14",nextState:"station"
+		state "station", label:"Station", action:"switchBtnMode", icon:"st.Entertainment.entertainment2",nextState:"genre"
+        state "genre", label:"Genre", action:"switchBtnMode", icon:"st.Electronics.electronics1",nextState:"normal"
+	}
 	standardTile("unsubscribe", "device.status", width: 1, height: 1, decoration: "flat") {
 		state "previous", label:'Unsubscribe', action:"unsubscribe", backgroundColor:"#ffffff"
 	}
 	
+    
+    valueTile("currentStations", "device.stationsDescription", inactiveLabel: true, height:10, width:3, decoration: "flat") {
+		state "default", label:'${currentValue}', backgroundColor:"#ffffff"
+	}
 
 
 	main "main"
@@ -121,7 +153,7 @@ metadata {
 		"previousTrack","play","nextTrack",
 		"levelSliderControl","stop","mute",
 		"currentSong",
-		"status","refresh", "doNotDisturb"
+		"status","refresh", "doNotDisturb","btnMode","currentStations"
 		
 		
 		//,"unsubscribe"
@@ -396,9 +428,10 @@ def poll() {
 
 
 def refresh() {
+
+
 	updateStatus()
-    
-    log.trace "cookie" + parent.state.cookie
+
 	def eventTime = new Date().time
 	
 	if( eventTime > state.secureEventTime ?:0)
@@ -428,9 +461,10 @@ def refresh() {
 }
 
 def updateStatus(){
+	log.trace "updateStatus"
 	def response = getStatus()
-
-    if(response){
+log.trace "response $response.data"
+    if(response?.data && response?.data != []){
     	def data = response.data
         
         if(data.playerInfo?.state){
@@ -467,9 +501,136 @@ def setCommand(command){
 
     def response = apiPost(params)
     //log.trace "response $response.data"
-    
-
 }
+
+def getSearchTuneIn(query) //transport info
+{
+    def params = [
+        uri: parent.state.domain + "/api/tunein/search?query="+URLEncoder.encode(query, "UTF-8") +"&mediaOwnerCustomerId=" + getDataValue("deviceOwnerCustomerId") ,
+        headers:[
+            "Csrf": parent.state.csrf,
+            "Cookie": parent.state.cookie,
+        ]
+	]
+    apiGet(params)
+}
+
+
+def playStation(incStatation = 0, incGenre = 0){
+	log.trace "playStation(incStatation = $incStatation, incGenre = $incGenre)"
+    def genre
+    if (settings["genres"]){
+        if (state.selectedGenres != settings["genres"]){
+            state.selectedGenres = settings["genres"]
+            state.genres = []
+            log.trace "state.genres ${state.selectedGenres}"
+            settings["genres"]?.tokenize(",").each{item ->
+            		if (item) state.genres << item.trim().toLowerCase()
+            }
+			log.trace "Genres parsed ${state.genres}"
+        }
+        if (incGenre == 1 || incGenre == -1) Collections.rotate(state.genres, -incGenre)
+        genre = state.genres[0]
+    }else{
+        genre = "smooth jazz"
+    }
+
+        log.trace "genre $genre"
+	if (genre){
+          def stations = getStationGenre(genre)
+        if (stations){
+            if (incStatation == 1 || incStatation == -1) Collections.rotate(state[genre], -incStatation)
+            def stationsDescription = " [${genre.toUpperCase()}] \n\n"
+            state[genre].each{it ->
+                stationsDescription = stationsDescription + (it.values().n[0]).toString()  + "\n\n"
+            }
+            stationsDescription = stationsDescription + "_________\n\n"
+            sendEvent(name: "stationsDescription",value: stationsDescription,descriptionText: stationsDescription	)
+            
+            
+            def stationUri = stations[0].keySet()[0]
+            log.trace "genre: $genre / station: ${stations[0].values().n[0]} / link: $stationUri"
+            
+            def params = [
+                uri: parent.state.domain + "/api/tunein/queue-and-play?deviceSerialNumber=" + getDataValue("serialNumber") + "&deviceType=" + getDataValue("deviceType") + "&guideId=" + stationUri + "&contentType=station&callSign=&mediaOwnerCustomerId=" + getDataValue("deviceOwnerCustomerId") ,
+                headers:[
+                    "Csrf": parent.state.csrf,
+                    "Cookie": parent.state.cookie,
+                ]
+            ]
+			log.trace ()
+            def response = apiPost(params)
+        }
+    }
+}
+
+
+def getStationGenre(genre){
+log.trace "getStationGenre($genre)"
+    if (genre){
+    	genre= genre.trim().toLowerCase()
+//    log.trace "state[genre] ${state[genre]}"
+    
+        if(!state[genre] || state[genre]?.size() == 0  ){
+  //      	log.trace "state[$genre] ${state[genre]}"
+            state[genre] = []
+            	def response = getSearchTuneIn(genre)
+            
+                try {
+                
+                //	log.trace "resp $resp ${response.data.any}"
+                     response.data.browseList.any { element ->
+                //    log.trace "element" + element
+               // 		log.trace "bool  ${ !(state[genre].find{it.values().n[0] == element.name} as Boolean)}"
+                        if (!element.name.contains("(Not Supported)") && element.available && !(state[genre].find{it?.values()?.n[0] == element.name} as Boolean) && element.id.startsWith("s")  ){
+                            state[genre] << ["${element.id}":[n:"${element.name}",a:""]]
+                         //   log.trace " new added-----------------------------state[$genre] ${element}"
+                           
+                            
+                 /*          state[genre].any {it ->
+                            log.trace "bb ${it.keySet()[0]}"
+                            	log.trace "bb ${it.keySet()[0].startsWith("s")}"
+                            }*/
+                          //  log.trace "bbbb ${ state[genre].find { it.key == "[s249973:[n:Smooth Jazz, a:]]" }  }"
+                           
+						}
+                        if (state[genre].size() >=20 ){
+                            return true // break
+                        }
+                    
+                }
+            } catch (ex) {
+                log.debug "something went wrong: $ex"
+            }
+        }
+     //   log.trace " new -----------------------------state[$genre] ${state[genre]}"
+        state[genre]
+    }else{
+     log.debug "vacio ${state[genre]} "
+    	[]
+    }
+}
+
+def playGenre(genre){
+    def stations = getStationGenre(genre)
+
+    log.trace "stations $stations"
+    if (stations){
+        def params = [
+            uri: parent.state.domain + "/api/tunein/queue-and-play?deviceSerialNumber=" + getDataValue("serialNumber") + "&deviceType=" + getDataValue("deviceType") + "&guideId=" + stations[0].keySet()[0] + "&contentType=station&callSign=&mediaOwnerCustomerId=" + getDataValue("deviceOwnerCustomerId") ,
+            headers:[
+                "Csrf": parent.state.csrf,
+                "Cookie": parent.state.cookie,
+            ]
+        ]
+        log.trace ()
+        def response = apiPost(params)
+    }
+    runIn(5, updateStatus)
+}
+
+
+
 
 def getStatus() //transport info
 {
@@ -482,13 +643,12 @@ def getStatus() //transport info
 	]
     //log.trace "params $params"
     apiGet(params)
-    
 }
 
 
 
 def play() {
-	setCommand('{"type":"PlayCommand"}')
+    setCommand('{"type":"PlayCommand"}')
 	runIn(5, updateStatus)
 }
 
@@ -504,13 +664,36 @@ def pause() {
 
 def nextTrack() {
 	setCommand('{"type":"NextCommand"}')
-    runIn(2, updateStatus)
+    runIn(5, updateStatus)
 }
 
 def previousTrack() {
 	setCommand('{"type":"PreviousCommand"}')
-    runIn(2, updateStatus)
+    runIn(5, updateStatus)
 }
+
+
+def nextStation() {
+	playStation(1,0)
+    runIn(5, updateStatus)
+}
+
+def previousStation() {
+	playStation(-1,0)
+    runIn(5, updateStatus)
+}
+
+def nextGenre() {
+    playStation(0,1)
+    runIn(5, updateStatus)
+}
+
+def previousGenre() {
+	playStation(0,-1)
+    runIn(5, updateStatus)
+}
+
+
 
 
 def tileSetLevel(val)
@@ -594,7 +777,12 @@ def apiPost(Map params){
     }
 }
 
-//--- fin modificado
+def setBtnMode(val)
+{
+	sendEvent(name:"btnMode",value:val,isStateChange:true)
+}
+
+//--- fin modificado----------------------------------------------------------------
 
 
 
@@ -603,6 +791,7 @@ def setDoNotDisturb(val)
 {
 	sendEvent(name:"doNotDisturb",value:val,isStateChange:true)
 }
+
 
 // Always sets only this level
 
@@ -650,7 +839,21 @@ def switchDoNotDisturb(){
 			setDoNotDisturb("off")
 	}
 }
-
+def switchBtnMode(){
+    switch(device.currentValue("btnMode")) {
+        case "normal":
+			setBtnMode("station")
+            break
+        case "station":
+			setBtnMode("genre")
+            break
+		case "genre":
+			setBtnMode("normal")
+            break
+		default:
+			setBtnMode("station")
+	}
+}
 
 def playByMode(uri, duration, volume,newTrack,mode) {
 
