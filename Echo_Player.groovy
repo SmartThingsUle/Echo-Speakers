@@ -1,8 +1,15 @@
 /** 
- *  Echo Player v1.1.0
+ *  Echo Player v1.2.0
  *
  *  Author: SmartThings - Ulises Mujica (Ule)
  *
+ *  1.2.0
+ *
+ *  createReminder  Added, you can create a new Reminder with command "createReminder", ["string","string"]
+ *  Format Date yyyy-MM-ddTHH:mm  -> 2018-12-25T00:01
+ *  Example createReminder("2018-12-25T00:01" , "Christmas Time")
+ *
+ *  1.1.0
  *  Search TuneIn Genres added, Like DLNA speaker, you can search Christmas, Jazz, French, etc.  stations
  *
  *  playStation(station, genre) it allows to send increments in stations or genres based in your genres settings
@@ -11,13 +18,18 @@
  *  ex playStation(0,1) paly the station in next genre
  *  ex playStation(-1,0) paly the previous station in current genre
  *  ex playStation(0,-1) paly the station in previous genre
+ *
+
+ 
  */
+
+
 
 
 preferences {
 		input(name: "customDelay", type: "enum", title: "Delay before msg (seconds)", options: ["0","1","2","3","4","5"])
 		input(name: "actionsDelay", type: "enum", title: "Delay between actions (seconds)", options: ["0","1","2","3"])
-        	input "genres", "text", title: "Multiple Searches, comma separator", required: false, description:"Smooth Jazz,Christmas"
+        input "genres", "text", title: "Multiple Searches, comma separator", required: false, description:"Smooth Jazz,Christmas"
 }
 metadata {
 	// Automatically generated. Make future change here.
@@ -55,15 +67,16 @@ metadata {
 		command "playTextAndResume", ["string","json_object","number"]
 		command "setDoNotDisturb", ["string"]
 		command "switchDoNotDisturb"
-		command "switchBtnMode"
-		command "speak", ["string"]
-		command "searchTuneIn", ["string"]
-		command "playStation", ["number","number"]
-		command "previousStation"
-		command "nextStation"
-		command "previousGenre"
-		command "nextGenre"
-		command "playGenre", ["string"]
+        command "switchBtnMode"
+        command "speak", ["string"]
+        command "searchTuneIn", ["string"]
+        command "playStation", ["number","number"]
+        command "previousStation"
+        command "nextStation"
+        command "previousGenre"
+        command "nextGenre"
+        command "playGenre", ["string"]
+        command "createReminder", ["string","string"] // ex 2018-12-25T00:01 , Christmas Time
 	}
 
 	// Main
@@ -199,9 +212,9 @@ def refresh() {
 		}
         
         // updateStatus()
-
+		state.lastRefreshTime = eventTime
 		/*
-        state.lastRefreshTime = eventTime
+        
 		log.trace "Refresh()"
         def result = []
         result << subscribe()
@@ -215,7 +228,7 @@ def refresh() {
     	log.trace "Refresh skipped"
     }
 }
-
+ 
 def updateStatus(){
 	log.trace "updateStatus"
 	def response = getStatus()
@@ -386,6 +399,22 @@ def playGenre(genre){
 }
 
 
+def createReminder(dateTime,reminderLabel ) //createReminder("2018-11-22T02:57", "My remote remainder")
+{
+    def originalDateTime = Date.parse("yyyy-MM-dd'T'HH:mm",dateTime)
+    
+    def params = [
+        uri: parent.state.domain + "/api/notifications/createReminder",
+        headers:[
+            "Csrf": parent.state.csrf,
+            "Cookie": parent.state.cookie,
+        ],
+        body:"{\"type\":\"Reminder\",\"status\":\"ON\",\"alarmTime\":${timeToday(originalDateTime.format("yyyy-MM-dd'T'HH:mm:ss.SSSZ"), location.timeZone).getTime()},\"originalTime\":\"${originalDateTime.format("HH:mm:00.000")}\",\"originalDate\":\"${originalDateTime.format("yyyy-MM-dd")}\",\"timeZoneId\":null,\"reminderIndex\":null,\"skillInfo\":null,\"sound\":null,\"deviceSerialNumber\":\"${getDataValue("serialNumber")}\",\"deviceType\":\"${getDataValue("deviceType")}\",\"recurringPattern\":null,\"reminderLabel\":\"$reminderLabel\",\"isSaveInFlight\":true,\"id\":\"createReminder\",\"isRecurring\":false,\"createdDate\":${new Date().getTime()}}"
+	]
+    log.trace "params $params"
+    apiPut(params)
+}
+
 
 
 def getStatus() //transport info
@@ -482,11 +511,10 @@ def unmute()
 def playTextAndResume(text, volume=null){
 	if (volume){
     
-    }
+}
+   
     
-    
-    
-    def sound = textToSpeech(text)
+def sound = textToSpeech(text)
 	playByMode(sound.uri, Math.max((sound.duration as Integer),1), volume, null, 1)
 }
 
@@ -506,6 +534,19 @@ def playText(msg){
 
 def speak(String msg){
 	playText(msg)
+}
+
+
+
+def apiPut(Map params){
+	try{
+		httpPut(params) {resp ->
+            resp
+        }
+    } catch (e) {
+    	log.trace "apiPut Error : $e" 
+        null
+    }
 }
 
 
