@@ -14,11 +14,10 @@
  */
 
 
-
 preferences {
 		input(name: "customDelay", type: "enum", title: "Delay before msg (seconds)", options: ["0","1","2","3","4","5"])
 		input(name: "actionsDelay", type: "enum", title: "Delay between actions (seconds)", options: ["0","1","2","3"])
-        input "genres", "text", title: "Multiple Searches, comma separator", required: false, description:"Smooth Jazz,Christmas"
+        	input "genres", "text", title: "Multiple Searches, comma separator", required: false, description:"Smooth Jazz,Christmas"
 }
 metadata {
 	// Automatically generated. Make future change here.
@@ -29,7 +28,7 @@ metadata {
 		capability "Sensor"
 		capability "Music Player"
 		capability "Polling"
-        	capability "Speech Synthesis"
+        capability "Speech Synthesis"
 
 		attribute "model", "string"
 		attribute "trackUri", "string"
@@ -73,7 +72,7 @@ metadata {
 		state "stopped", label:'Stopped', action:"music Player.play", icon:"st.Electronics.electronics16", backgroundColor:"#ffffff"
 		state "paused", label:'Paused', action:"music Player.play", icon:"st.Electronics.electronics16", nextState:"playing", backgroundColor:"#ffffff"
 		state "no_media_present", label:'No Media', icon:"st.Electronics.electronics16", backgroundColor:"#ffffff"
-        	state "no_device_present", label:'No Present', icon:"st.Electronics.electronics16", backgroundColor:"#b6b6b4"
+        state "no_device_present", label:'No Present', icon:"st.Electronics.electronics16", backgroundColor:"#b6b6b4"
 		state "grouped", label:'Grouped', icon:"st.Electronics.electronics16", backgroundColor:"#ffffff"
 	}
 
@@ -95,7 +94,7 @@ metadata {
 	}
 
 	// Row 2
-    	controlTile("levelSliderControl", "device.level", "slider", height: 1, width: 1, inactiveLabel: false) {
+    controlTile("levelSliderControl", "device.level", "slider", height: 1, width: 1, inactiveLabel: false) {
 		state "level", action:"tileSetLevel", backgroundColor:"#ffffff"
 	}
 	standardTile("stop", "device.status", width: 1, height: 1, decoration: "flat") {
@@ -126,17 +125,18 @@ metadata {
 	standardTile("refresh", "device.status", inactiveLabel: false, decoration: "flat") {
 		state "default", label:"", action:"refresh.refresh", icon:"st.secondary.refresh", backgroundColor:"#ffffff"
 	}
+    standardTile("btnMode", "device.btnMode", width: 1, height: 1, decoration: "flat", canChangeIcon: true) {
+		state "default", label:"Normal", action:"switchBtnMode", icon:"st.Electronics.electronics14",nextState:"station"
+		state "station", label:"Station", action:"switchBtnMode", icon:"st.Entertainment.entertainment2",nextState:"genre"
+        state "genre", label:"Genre", action:"switchBtnMode", icon:"st.Electronics.electronics1",nextState:"normal"
+	}
 	standardTile("doNotDisturb", "device.doNotDisturb", width: 1, height: 1, decoration: "flat", canChangeIcon: true) {
 		state "off", label:"MSG Enabled", action:"switchDoNotDisturb", icon:"st.alarm.beep.beep",nextState:"on"
 		state "on", label:"MSG Disabled", action:"switchDoNotDisturb", icon:"st.custom.sonos.muted",nextState:"on_playing"
         state "on_playing", label:"MSG on Stopped", action:"switchDoNotDisturb", icon:"st.alarm.beep.beep",nextState:"off_playing"
         state "off_playing", label:"MSG on Playing", action:"switchDoNotDisturb", icon:"st.alarm.beep.beep",nextState:"off"
 	}
-    standardTile("btnMode", "device.btnMode", width: 1, height: 1, decoration: "flat", canChangeIcon: true) {
-		state "default", label:"Normal", action:"switchBtnMode", icon:"st.Electronics.electronics14",nextState:"station"
-		state "station", label:"Station", action:"switchBtnMode", icon:"st.Entertainment.entertainment2",nextState:"genre"
-        state "genre", label:"Genre", action:"switchBtnMode", icon:"st.Electronics.electronics1",nextState:"normal"
-	}
+
 	standardTile("unsubscribe", "device.status", width: 1, height: 1, decoration: "flat") {
 		state "previous", label:'Unsubscribe', action:"unsubscribe", backgroundColor:"#ffffff"
 	}
@@ -153,7 +153,7 @@ metadata {
 		"previousTrack","play","nextTrack",
 		"levelSliderControl","stop","mute",
 		"currentSong",
-		"status","refresh", "doNotDisturb","btnMode","currentStations"
+		"status","btnMode","refresh", "doNotDisturb","currentStations"
 		
 		
 		//,"unsubscribe"
@@ -162,233 +162,7 @@ metadata {
 
 
 def parse(description) {
-    def results = []
-	try {
-		def msg = parseLanMessage(description)
-        if (msg.headers)
-		{
-			def hdr = msg.header.split('\n')[0]
-			if (hdr.size() > 36) {
-				hdr = hdr[0..35] + "..."
-			}
-
-			def sid = ""
-			if (msg.headers["SID"])
-			{
-				sid = msg.headers["SID"]
-				sid -= "uuid:"
-				sid = sid.trim()
-
-			}
-
-			if (!msg.body) {
-				if (sid) {
-					updateSid(sid)
-				}
-			}
-			else if (msg.xml) {
-
-				// Process response to getVolume()
-				def node = msg.xml.Body.GetVolumeResponse
-
-				node = msg.xml.Body.GetVolumeResponse
-				if (node.size()) {
-					def currentVolume = node.CurrentVolume.text()
-                    if (currentVolume) {
-						sendEvent(name: "level", value: currentVolume, description: "$device.displayName Volume is $currentVolume")
-					}
-				}
-				// Process response to getCurrentStatus()
-				node = msg.xml.Body.GetTransportInfoResponse
-				if (node.size()) {
-					def currentStatus = statusText(node.CurrentTransportState.text())
-					if (currentStatus) {
-						state.lastStatusTime = new Date().time
-						if (currentStatus != "TRANSITIONING") {
-							sendEvent(name: "status", value: currentStatus, data: [source: 'xml.Body.GetTransportInfoResponse'])
-							sendEvent(name: "switch", value: currentStatus=="playing" ? "on" : "off", displayed: false)
-
-						}
-					}
-				}
-				node = msg.xml.Body.GetTransportSettingsResponse
-				if (node.size()) {
-                	def currentPlayMode = node.PlayMode.text()
-                    
-                    if (currentPlayMode) {
-						sendEvent(name: "playMode", value: currentPlayMode, description: "$device.displayName Play Mode is $currentPlayMode")
-					}
-				}
-
-				
-
-				// Process subscription update
-				node = msg.xml.property.LastChange
-				if (node?.text()?.size()>0) {
-					
-					def xml1 = parseXml(node.text())
-
-					// Play/pause status
-					def currentStatus = statusText(xml1.InstanceID.TransportState.'@val'.text())
-                    if (currentStatus) {
-						state.lastStatusTime = new Date().time
-						if (currentStatus != "TRANSITIONING") {
-							updateDataValue('currentStatus', currentStatus)
-							sendEvent(name: "status", value: currentStatus, data: currentStatus, displayed: false)
-							sendEvent(name: "switch", value: currentStatus=="playing" ? "on" : "off", displayed: false)
-						}
-						if (currentStatus == "no_media_present") {sendEvent(name: "trackDescription",value: "",descriptionText: "", displayed: false)}
-					}
-
-					// Volume level
-					def currentLevel = xml1.InstanceID.Volume.find{it.'@channel' == 'Master'}.'@val'.text()
-					currentLevel = currentLevel?:xml1.InstanceID.Volume.find{it.'@Channel' == 'Master'}.'@val'.text()
-
-					if (currentLevel) {
-						sendEvent(name: "level", value: currentLevel, description: "$device.displayName volume is $currentLevel")
-					}
-                    
-					
-					// PlayMode 
-					def currentPlayMode = xml1.InstanceID.CurrentPlayMode.'@val'.text()
-					
-                    if (currentPlayMode) {
-						sendEvent(name: "playMode", value: currentPlayMode, description: "$device.displayName Play Mode is $currentPlayMode")
-					}
-		
-
-					// Mute status
-					def currentMute = xml1.InstanceID.Mute.find{it.'@channel' == 'Master'}.'@val'.text()
-
-					if (currentMute) {
-						def value = currentMute == "1" ? "muted" : "unmuted"
-                        sendEvent(name: "mute", value: value, descriptionText: "$device.displayName is $value")
-					}
-
-					// Track data
-					def trackUri = xml1.InstanceID.CurrentTrackURI.'@val'.text()
-					def transportUri = xml1.InstanceID.AVTransportURI.'@val'.text()
-					def trackNumber = xml1.InstanceID.CurrentTrack.'@val'.text()
-
-					if (trackUri.contains("//s3.amazonaws.com/smartapp-") || transportUri.contains("//s3.amazonaws.com/smartapp-") ) {
-						log.trace "Skipping event generation for sound file $trackUri"
-					}
-					else {
-						
-						transportUri = transportUri ? transportUri : (state.transportUri ?: "")
-						transportUri = trackNumber.length() >0 ? transportUri.replaceAll(/fii%3d.*?%26/, "fii%3d${Math.max(trackNumber.toInteger() - 1,0)}%26") : transportUri
-						state.transportUri = transportUri
-					
-						def trackMeta = xml1.InstanceID.CurrentTrackMetaData.'@val'.text()
-						def transportMeta = xml1.InstanceID.AVTransportURIMetaData.'@val'.text()
-						
-
-						if (trackMeta || transportMeta) {
-							def metaDataLoad = trackMeta  ? trackMeta : transportMeta
-                            def metaData = metaDataLoad?.startsWith("<item") ?  "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\">$metaDataLoad</DIDL-Lite>": metaDataLoad 
-							metaData = metaData.contains("dlna:dlna") &&  !metaData.contains("xmlns:dlna") ? metaData.replace("<DIDL-Lite"," <DIDL-Lite xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"") : metaData
-							trace.debug metaData
-                            
-                            def stationMetaXml = metaData ? parseXml(metaData) : null
-							
-							
-							
-							// Use the track metadata for song ID unless it's a radio station
-							//def trackXml = (trackMeta && !isRadioStation) || !stationMetaXml ? parseXml(trackMeta) : stationMetaXml
-							def trackXml = stationMetaXml;
-							// Song properties
-							def currentName = trackXml.item.title.text()
-							def currentArtist = trackXml.item.creator.text()
-							def currentAlbum  = trackXml.item.album.text()
-							def currentItemId  = trackXml.item.'@id'.text()
-							def currentParentId  = trackXml.item.'@parentID'.text()
-							def currentTrackDescription = currentName
-							
-							if (transportUri.contains(currentParentId) && currentItemId){
-								transportUri = transportUri.replaceAll(/%26fid%3d.*?%26/, "%26fid%3d$currentItemId%26")
-								state.transportUri = transportUri
-							}
-							
-							
-							def descriptionText = "$device.displayName is playing $currentTrackDescription"
-							if (currentArtist) {
-								currentTrackDescription += " - $currentArtist"
-								descriptionText += " by $currentArtist"
-							}
-
-							// Track Description Event
-								sendEvent(name: "trackDescription",value: currentTrackDescription.replaceAll("_"," "),descriptionText: descriptionText	)
-
-							// Have seen cases where there is no engueued or transport metadata. Haven't figured out how to resume in that case
-							// so not creating a track data event.
-							//
-							if (stationMetaXml) {
-								// Track Data Event
-								// Use track description for the data event description unless it is a queued song (to support resumption & use in mood music)
-								def station =  currentName
-
-								def uri = transportUri ?  transportUri : trackUri
-								def previousState = device.currentState("trackData")?.jsonValue
-								def isDataStateChange = !previousState || (previousState.station != station || previousState.metaData != metaData)
-
-                                def trackDataValue = [
-									station:  station ,
-									name: currentName,
-									artist: currentArtist,
-									album: currentAlbum,
-									trackNumber: trackNumber,
-									status: currentStatus,
-									level: currentLevel,
-									uri: trackUri,
-									trackUri: trackUri,
-									transportUri: transportUri,
-									enqueuedUri: "",
-									metaData: metaData,
-								]
-
-								if (uri?.startsWith("dlna-playcontainer:") && trackUri && !trackUri?.startsWith("dlna-playcontainer:") && !trackUri?.startsWith("http://127.0.0.1")){
-									results << createEvent(name: "trackData",value: trackDataValue.encodeAsJSON(),descriptionText: currentDescription,displayed: false,isStateChange: isDataStateChange	)
-								}
-                                trackDataValue.uri = uri
-                                trackDataValue.station = uri?.startsWith("http://127.0.0.1")? "Unavailable-$station":(uri?.startsWith("dlna-playcontainer:")? "P.L. $station": station )
-								results << createEvent(name: "trackData",value: trackDataValue.encodeAsJSON(),descriptionText: currentDescription,displayed: false,isStateChange: isDataStateChange	)
-							}
-						}
-					}
-				}
-				if (!results) {
-					def bodyHtml = msg.body ? msg.body.replaceAll('(<[a-z,A-Z,0-9,\\-,_,:]+>)','\n$1\n')
-						.replaceAll('(</[a-z,A-Z,0-9,\\-,_,:]+>)','\n$1\n')
-						.replaceAll('\n\n','\n').encodeAsHTML() : ""
-					results << createEvent(
-						name: "mediaRendererMessage",
-						value: "${msg.body.encodeAsMD5()}",
-						description: description,
-						descriptionText: "Body is ${msg.body?.size() ?: 0} bytes",
-						data: "<pre>${msg.headers.collect{it.key + ': ' + it.value}.join('\n')}</pre><br/><pre>${bodyHtml}</pre>",
-						isStateChange: false, displayed: false)
-				}
-			}
-			else {
-				def bodyHtml = msg.body ? msg.body.replaceAll('(<[a-z,A-Z,0-9,\\-,_,:]+>)','\n$1\n')
-					.replaceAll('(</[a-z,A-Z,0-9,\\-,_,:]+>)','\n$1\n')
-					.replaceAll('\n\n','\n').encodeAsHTML() : ""
-				results << createEvent(
-					name: "unknownMessage",
-					value: "${msg.body.encodeAsMD5()}",
-					description: description,
-					descriptionText: "Body is ${msg.body?.size() ?: 0} bytes",
-					data: "<pre>${msg.headers.collect{it.key + ': ' + it.value}.join('\n')}</pre><br/><pre>${bodyHtml}</pre>",
-					isStateChange: true, displayed: true)
-			}
-		}
-	}
-	catch (Throwable t) {
-		//results << createEvent(name: "parseError", value: "$t")
-		sendEvent(name: "parseError", value: "$t", description: description)
-		throw t
-	}
-	results
+   
 }
 
 def installed() {
@@ -409,22 +183,6 @@ def off(){
 def poll() {
 	refresh()
 }
-/// modificado--
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def refresh() {
@@ -441,9 +199,7 @@ def refresh() {
 		}
         
         // updateStatus()
-        
-        
-        
+
 		/*
         state.lastRefreshTime = eventTime
 		log.trace "Refresh()"
@@ -463,7 +219,7 @@ def refresh() {
 def updateStatus(){
 	log.trace "updateStatus"
 	def response = getStatus()
-log.trace "response $response.data"
+//log.trace "response $response.data"
     if(response?.data && response?.data != []){
     	def data = response.data
         
@@ -484,7 +240,7 @@ log.trace "response $response.data"
             def muted = data.playerInfo?.volume?.muted == "true" ? "muted" : "unmuted"
 			sendEvent(name: "mute", value: muted, descriptionText: "$device.displayName is $muted",displayed: false)
         }
-        log.trace "updateStatus()  response $response.data "
+       //log.trace "updateStatus()  response $response.data "
     }
 
 }
@@ -545,11 +301,11 @@ def playStation(incStatation = 0, incGenre = 0){
                 stationsDescription = stationsDescription + (it.values().n[0]).toString()  + "\n\n"
             }
             stationsDescription = stationsDescription + "_________\n\n"
-            sendEvent(name: "stationsDescription",value: stationsDescription,descriptionText: stationsDescription	)
+            sendEvent(name: "stationsDescription",value: stationsDescription,descriptionText: stationsDescription,displayed: false	)
             
             
             def stationUri = stations[0].keySet()[0]
-            log.trace "genre: $genre / station: ${stations[0].values().n[0]} / link: $stationUri"
+           // log.trace "genre: $genre / station: ${stations[0].values().n[0]} / link: $stationUri"
             
             def params = [
                 uri: parent.state.domain + "/api/tunein/queue-and-play?deviceSerialNumber=" + getDataValue("serialNumber") + "&deviceType=" + getDataValue("deviceType") + "&guideId=" + stationUri + "&contentType=station&callSign=&mediaOwnerCustomerId=" + getDataValue("deviceOwnerCustomerId") ,
