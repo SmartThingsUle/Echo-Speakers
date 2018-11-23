@@ -2,12 +2,20 @@
  *  Echo Player v1.3.1
  *
  *  Author: SmartThings - Ulises Mujica (Ule)
+ 
+ 
+ 
+ *  1.4.0
+ *
+ *  Added some speak commands in speak function , now you can ask  Weather,Traffic,FlashBriefing,GoodMorning,SingASong,TellStory in speak command
+ *  Restore volume is not possible due a undefined lenght of phrase, but you can force a restore volume if you set a delay
+ *  Example speak("weather") or speak("tellStory",50) or speak("tellStory",50, 20)
  *
  *  1.3.1
  *
  *  Speak Parametrs Added, you can use speak with volume change and custom delay, volume and delay are optional speak(Message required, Volume optional, Delay optional) 
  *  speak("The door is open") TTS
- *  speak("The door is open", 50) TTS If New Volumen != Current Volume it changes and after some time the volume is restored, the delay is message/19 
+ *  speak("The door is open", 50) TTS If New Volumen != Current Volume it changes and after some time the volume is restored, the delay is message/17 
  *  speak("The door is open", 50, 4) TTS If New Volumen != Current Volume it changes and after custom delay the volume is restored 
  *  Fix Volume value, each Update Status the volume is updated even if no media is playng  
  *  Fix Status, Added "IDLE" and "Standby" status
@@ -57,22 +65,22 @@ metadata {
 		
 
 
-		command "subscribe"
+			command "subscribe"
 		command "getVolume"
 		command "getCurrentMedia"
 		command "getCurrentStatus"
 		command "seek"
-		command "unsubscribe"
 		command "setLocalLevel", ["number"]
 		command "tileSetLevel", ["number"]
-		command "playTrackAtVolume", ["string","number"]
-		command "playTrackAndResume", ["string","number","number"]
 		command "playTextAndResume", ["string","number"]
-		command "playTrackAndRestore", ["string","number","number"]
 		command "playTextAndRestore", ["string","number"]
-		command "playSoundAndTrack", ["string","number","json_object","number"]
-		command "playTextAndResume", ["string","json_object","number"]
-		command "setDoNotDisturb", ["string"]
+        	command "unsubscribe"
+			command "playTrackAtVolume", ["string","number"]
+			command "playTrackAndResume", ["string","number","number"]
+			command "playTrackAndRestore", ["string","number","number"]
+			command "playSoundAndTrack", ["string","number","json_object","number"]
+			command "playTextAndResume", ["string","json_object","number"]
+			command "setDoNotDisturb", ["string"]
 		command "switchDoNotDisturb"
         command "switchBtnMode"
         command "speak", ["string"]
@@ -222,10 +230,9 @@ def refresh() {
 def updateStatus(){
 	log.trace "updateStatus"
 	def response = getStatus()
-//log.trace "response $response.data"
     if(response?.data && response?.data != []){
     	def data = response.data
-		log.trace "response.data ${response.data}"
+	//	log.trace "response.data ${response.data}"
         if(data.playerInfo?.state){
         	def state = data.playerInfo?.state.toLowerCase()
         	sendEvent(name: "status", value: state, displayed: false)
@@ -268,6 +275,7 @@ def setCommand(command){
         ],
         body:command
 	]
+    //log.trace "params $params"
     def response = apiPost(params)
 }
 
@@ -444,9 +452,8 @@ def getStatus() //transport info
 
 
 def play() {
-
-	setCommand('{"type":"PlayCommand"}')
-	runIn(5, updateStatus)
+    setCommand('{"type":"PlayCommand"}')
+    runIn(5, updateStatus)
 }
 
 def stop() {
@@ -518,24 +525,36 @@ def unmute()
 }
 
 def playTextAndResume(text, volume=null){
-	if (volume){
-    
-	}
-	def sound = textToSpeech(text)
-	playByMode(sound.uri, Math.max((sound.duration as Integer),1), volume, null, 1)
+    speak(text,volume,null)
+}
+
+def playTextAndRestore(text, volume=null){
+	speak(text,volume,null)
 }
 
 
 def playText(msg){
 	log.trace "playText($msg)"
+    def type =  ["Weather","Traffic","FlashBriefing","GoodMorning","SingASong","TellStory"].find{ it.toLowerCase() == msg.toLowerCase()}
+    def tts = ""
+    if (type){
+    	type = "Alexa.${type}.Play"
+    }else{
+    	type = "Alexa.Speak"
+        tts = ", \\\"textToSpeak\\\": \\\"" + msg + "\\\"" 
+    }
+    log.trace "type = $type tts $tts"
+       
+        
     def params = [
         uri: parent.state.domain + "/api/behaviors/preview",
         headers:[
             "Csrf": parent.state.csrf,
             "Cookie": parent.state.cookie,
                 ],
-         body:"{\"behaviorId\":\"PREVIEW\",\"sequenceJson\":\"{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.Sequence\\\", \\\"startNode\\\":{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\\\",\\\"type\\\":\\\"Alexa.Speak\\\",\\\"operationPayload\\\":{\\\"deviceType\\\":\\\"" +  getDataValue("deviceType") + "\\\",        \\\"deviceSerialNumber\\\":\\\"" +  getDataValue("serialNumber") + "\\\",\\\"locale\\\":\\\"en-US\\\", \\\"customerId\\\":\\\"" +  getDataValue("deviceOwnerCustomerId") + "\\\", \\\"textToSpeak\\\": \\\"" + msg + "\\\"}}}\", \"status\":\"ENABLED\"}"
+         body:"{\"behaviorId\":\"PREVIEW\",\"sequenceJson\":\"{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.Sequence\\\", \\\"startNode\\\":{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\\\",\\\"type\\\":\\\"${type}\\\",\\\"operationPayload\\\":{\\\"deviceType\\\":\\\"" +  getDataValue("deviceType") + "\\\",        \\\"deviceSerialNumber\\\":\\\"" +  getDataValue("serialNumber") + "\\\",\\\"locale\\\":\\\"es-US\\\", \\\"customerId\\\":\\\"" +  getDataValue("deviceOwnerCustomerId") + "\\\"${tts}}}}\", \"status\":\"ENABLED\"}"
         ]
+        //log.trace params
         def response = apiPost(params)
 }
 
@@ -544,15 +563,20 @@ def speak(String msg, Integer volume = null, Integer delay=null){
 	log.trace "speak($msg, $volume, $delay)"
     def currentVolume
     def response = playText(msg)
+
+	delay = delay ? delay :  Math.max(Math.round(msg.length()/16),2)
+
     if (volume){
     	volume = Math.max(Math.min(Math.round(volume), 100), 0)
     	currentVolume = device.currentState("level")?.integerValue
+        log.trace "volume $volume currentVolume $currentVolume"
     	if (currentVolume != volume && volume > 0){
             setCommand('{"type":"VolumeLevelCommand","volumeLevel":'+volume+',"contentFocusClientId":null}')
-        	delay = delay ? Math.max(delay,2) :  Math.max(Math.round(msg.length()/19),2) 
+            if( ["Weather","Traffic","FlashBriefing","GoodMorning","SingASong","TellStory"].find{ it.toLowerCase() == msg.toLowerCase()} && delay <= 2 ) delay = -1
         }else{volume = null}
     }
-	if (volume) runIn(delay,  "executeFunction", [data: [function: "setCommand" , parametrs: '{"type":"VolumeLevelCommand","volumeLevel":'+currentVolume+',"contentFocusClientId":null}']])
+    //log.trace "delay $delay volume $volume"
+	if (volume && delay > 0) runIn(delay,  "executeFunction", [data: [function: "setCommand" , parametrs: '{"type":"VolumeLevelCommand","volumeLevel":'+currentVolume+',"contentFocusClientId":null}']])
 }
 
 def executeFunction(data){
@@ -603,6 +627,31 @@ def setBtnMode(val)
 	sendEvent(name:"btnMode",value:val,isStateChange:true)
 }
 
+def getVolume()
+{
+	updateStatus()
+}
+
+
+def getPlayMode()
+{
+	updateStatus()
+}
+def getCurrentMedia()
+{
+	updateStatus()
+}
+
+def getCurrentStatus() //transport info
+{
+	updateStatus()
+}
+
+def seek(index) {
+	playStation(index,0)
+    runIn(5, updateStatus)
+}
+
 //--- fin modificado----------------------------------------------------------------
 
 
@@ -637,9 +686,7 @@ private childLevel(previousMaster, newMaster, previousChild)
 }
 
 
-def seek(trackNumber) {
-	mediaRendererAction("Seek", "AVTransport", getDataValue("avtcurl") , [InstanceID:0, Unit:"TRACK_NR", Target:trackNumber])
-}
+
 
 def setPlayMode(mode)
 {
@@ -765,10 +812,7 @@ def playByMode(uri, duration, volume,newTrack,mode) {
 }
 
 
-def playTextAndRestore(text, volume=null){
-	def sound = textToSpeech(text)
-	playByMode(sound.uri, Math.max((sound.duration as Integer),1), volume, null, 2)
-}
+
 def playTextAndTrack(text, trackData, volume=null){
 	def sound = textToSpeech(text)
 	playByMode(sound.uri, Math.max((sound.duration as Integer),1), volume, trackData, 3)
@@ -871,24 +915,9 @@ def unsubscribe() {
 	result
 }
 
-def getVolume()
-{
-	mediaRendererAction("GetVolume", "RenderingControl", getDataValue("rccurl"), [InstanceID:0, Channel:"Master"])
-}
 
-def getPlayMode()
-{
-	mediaRendererAction("GetTransportSettings", [InstanceID:0])
-}
-def getCurrentMedia()
-{
-	mediaRendererAction("GetPositionInfo", [InstanceID:0, Channel:"Master"])
-}
 
-def getCurrentStatus() //transport info
-{
-	mediaRendererAction("GetTransportInfo", [InstanceID:0])
-}
+
 
 def getSystemString()
 {
