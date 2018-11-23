@@ -445,32 +445,8 @@ def getStatus() //transport info
 
 def play() {
 
-def response = playText("This is a example message")
-
-log.trace "play $response"
-
-/*
-    setCommand('{"type":"PlayCommand"}')
+	setCommand('{"type":"PlayCommand"}')
 	runIn(5, updateStatus)
-  */
-  /*
-    def response = getStatusM()
-
-
-    if(response?.data && response?.data != []){
-            def data = response.data
-            log.trace "response $response.data"
-    }
-    
-    
-    response = getStatus()
-//log.trace "response $response.data"
-    if(response?.data && response?.data != []){
-    	def data = response.data
-            log.trace "response $response.data"
-    }
-*/
-
 }
 
 def stop() {
