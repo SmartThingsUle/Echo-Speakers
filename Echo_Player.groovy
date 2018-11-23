@@ -1,11 +1,20 @@
 /** 
- *  Echo Player v1.2.0
+ *  Echo Player v1.3.1
  *
  *  Author: SmartThings - Ulises Mujica (Ule)
  *
+ *  1.3.1
+ *
+ *  Speak Parametrs Added, you can use speak with volume change and custom delay, volume and delay are optional speak(Message required, Volume optional, Delay optional) 
+ *  speak("The door is open") TTS
+ *  speak("The door is open", 50) TTS If New Volumen != Current Volume it changes and after some time the volume is restored, the delay is message/19 
+ *  speak("The door is open", 50, 4) TTS If New Volumen != Current Volume it changes and after custom delay the volume is restored 
+ *  Fix Volume value, each Update Status the volume is updated even if no media is playng  
+ *  Fix Status, Added "IDLE" and "Standby" status
+ *
  *  1.2.0
  *
- *  createReminder  Added, you can create a new Reminder with command "createReminder", ["string","string"]
+ *  createReminder  Added, you can create a new Reminder with command "createReminder", ["string","string"] 
  *  Format Date yyyy-MM-ddTHH:mm  -> 2018-12-25T00:01
  *  Example createReminder("2018-12-25T00:01" , "Christmas Time")
  *
@@ -22,8 +31,6 @@
 
  
  */
-
-
 
 
 preferences {
@@ -85,6 +92,8 @@ metadata {
 		state "stopped", label:'Stopped', action:"music Player.play", icon:"st.Electronics.electronics16", backgroundColor:"#ffffff"
 		state "paused", label:'Paused', action:"music Player.play", icon:"st.Electronics.electronics16", nextState:"playing", backgroundColor:"#ffffff"
 		state "no_media_present", label:'No Media', icon:"st.Electronics.electronics16", backgroundColor:"#ffffff"
+        state "idle", label:'IDLE', icon:"st.Electronics.electronics16", backgroundColor:"#ffffff"
+        state "standby", label:'Standby', icon:"st.Electronics.electronics16", backgroundColor:"#b6b6b4"
         state "no_device_present", label:'No Present', icon:"st.Electronics.electronics16", backgroundColor:"#b6b6b4"
 		state "grouped", label:'Grouped', icon:"st.Electronics.electronics16", backgroundColor:"#ffffff"
 	}
@@ -134,6 +143,8 @@ metadata {
 		state "no_media_present", label:'No Media', icon:"st.Electronics.electronics16", backgroundColor:"#ffffff"
 		state "no_device_present", label:'No Present', icon:"st.Electronics.electronics16", backgroundColor:"#ffffff"
 		state "paused", label:'Paused', action:"music Player.play", icon:"st.Electronics.electronics16", nextState:"playing", backgroundColor:"#ffffff"
+        state "idle", label:'IDLE', icon:"st.Electronics.electronics16", backgroundColor:"#ffffff"
+        state "standby", label:'Standby', icon:"st.Electronics.electronics16", backgroundColor:"#ffffff"
 	}
 	standardTile("refresh", "device.status", inactiveLabel: false, decoration: "flat") {
 		state "default", label:"", action:"refresh.refresh", icon:"st.secondary.refresh", backgroundColor:"#ffffff"
@@ -199,34 +210,13 @@ def poll() {
 
 
 def refresh() {
-
-
-	updateStatus()
-
-	def eventTime = new Date().time
-	
-	if( eventTime > state.secureEventTime ?:0)
-	{
-		if ((state.lastRefreshTime ?: 0) > (state.lastStatusTime ?:0)){
-				sendEvent(name: "status", value: "no_device_present", data: "no_device_present", displayed: false)
-		}
-        
-        // updateStatus()
-		state.lastRefreshTime = eventTime
-		/*
-        
-		log.trace "Refresh()"
-        def result = []
-        result << subscribe()
-		result << getCurrentStatus()
-		result << getVolume()
-        result << getPlayMode()
-		result.flatten()
-        */
-        
-	}else{
-    	log.trace "Refresh skipped"
+	log.trace "state.lastRefreshTime ${state.lastRefreshTime} state.lastStatusTime ${state.lastStatusTime}"
+    if ((state.lastRefreshTime ?: 0) > (state.lastStatusTime ?:0)){
+        sendEvent(name: "status", value: "no_device_present", data: "no_device_present", displayed: false)
     }
+    state.lastRefreshTime = new Date().time
+    updateStatus()
+    
 }
  
 def updateStatus(){
@@ -235,13 +225,13 @@ def updateStatus(){
 //log.trace "response $response.data"
     if(response?.data && response?.data != []){
     	def data = response.data
-        
+		log.trace "response.data ${response.data}"
         if(data.playerInfo?.state){
         	def state = data.playerInfo?.state.toLowerCase()
         	sendEvent(name: "status", value: state, displayed: false)
 			sendEvent(name: "switch", value: state=="playing" ? "on" : "off", displayed: false)
         }else{
-        	sendEvent(name: "status", value: "no_media_present", displayed: false)
+        	sendEvent(name: "status", value: "standby", displayed: false)
 			sendEvent(name: "switch", value: "off", displayed: false)
         }
         if(data.playerInfo?.infoText?.title){
@@ -249,10 +239,21 @@ def updateStatus(){
         	sendEvent(name: "trackDescription",value: trackDescription,descriptionText: trackDescription	)
         }
         if(data.playerInfo?.volume?.volume){
-        	sendEvent(name: "level", value: data.playerInfo?.volume?.volume, description: "$device.displayName Volume is $currentVolume",displayed: false)
+        	sendEvent(name: "level", value: data.playerInfo?.volume?.volume, description: "$device.displayName Volume is ${data.playerInfo?.volume?.volume}",displayed: false)
             def muted = data.playerInfo?.volume?.muted == "true" ? "muted" : "unmuted"
 			sendEvent(name: "mute", value: muted, descriptionText: "$device.displayName is $muted",displayed: false)
+        }else{
+         	def responseM = getMStatus()
+        	 if(responseM?.data && responseM?.data != []){
+             	def dataM = responseM.data
+                if(dataM?.volume){
+                    sendEvent(name: "level", value: dataM.volume, description: "$device.displayName Volume is ${dataM.volume}",displayed: false)
+                    def muted = dataM.muted == "true" ? "muted" : "unmuted"
+                    sendEvent(name: "mute", value: muted, descriptionText: "$device.displayName is $muted",displayed: false)
+                }
+             }
         }
+        state.lastStatusTime = new Date().time
        //log.trace "updateStatus()  response $response.data "
     }
 
@@ -267,9 +268,7 @@ def setCommand(command){
         ],
         body:command
 	]
-
     def response = apiPost(params)
-    //log.trace "response $response.data"
 }
 
 def getSearchTuneIn(query) //transport info
@@ -401,7 +400,8 @@ def playGenre(genre){
 
 def createReminder(dateTime,reminderLabel ) //createReminder("2018-11-22T02:57", "My remote remainder")
 {
-    def originalDateTime = Date.parse("yyyy-MM-dd'T'HH:mm",dateTime)
+	log.trace "createReminder(${dateTime.take(16)},$reminderLabel )"
+    def originalDateTime = Date.parse("yyyy-MM-dd'T'HH:mm",dateTime.take(16))
     
     def params = [
         uri: parent.state.domain + "/api/notifications/createReminder",
@@ -411,11 +411,22 @@ def createReminder(dateTime,reminderLabel ) //createReminder("2018-11-22T02:57",
         ],
         body:"{\"type\":\"Reminder\",\"status\":\"ON\",\"alarmTime\":${timeToday(originalDateTime.format("yyyy-MM-dd'T'HH:mm:ss.SSSZ"), location.timeZone).getTime()},\"originalTime\":\"${originalDateTime.format("HH:mm:00.000")}\",\"originalDate\":\"${originalDateTime.format("yyyy-MM-dd")}\",\"timeZoneId\":null,\"reminderIndex\":null,\"skillInfo\":null,\"sound\":null,\"deviceSerialNumber\":\"${getDataValue("serialNumber")}\",\"deviceType\":\"${getDataValue("deviceType")}\",\"recurringPattern\":null,\"reminderLabel\":\"$reminderLabel\",\"isSaveInFlight\":true,\"id\":\"createReminder\",\"isRecurring\":false,\"createdDate\":${new Date().getTime()}}"
 	]
-    log.trace "params $params"
-    apiPut(params)
+    def response = apiPut(params)
+    if (response) sendEvent(name: "createReminder",value: "Reminder Created > $reminderLabel ${dateTime.take(16)}",descriptionText: "Reminder Created > $reminderLabel ${dateTime.take(16)}")
 }
 
-
+def getMStatus() 
+{
+	def params = [
+        uri: parent.state.domain + "/api/media/state?deviceSerialNumber=" + getDataValue("serialNumber") + "&deviceType=" + getDataValue("deviceType") ,//+ "&screenWidth=2560"
+        headers:[
+            "Csrf": parent.state.csrf,
+            "Cookie": parent.state.cookie,
+        ]
+	]
+    //log.trace "params $params"
+    apiGet(params)
+}
 
 def getStatus() //transport info
 {
@@ -433,8 +444,33 @@ def getStatus() //transport info
 
 
 def play() {
+
+def response = playText("This is a example message")
+
+log.trace "play $response"
+
+/*
     setCommand('{"type":"PlayCommand"}')
 	runIn(5, updateStatus)
+  */
+  /*
+    def response = getStatusM()
+
+
+    if(response?.data && response?.data != []){
+            def data = response.data
+            log.trace "response $response.data"
+    }
+    
+    
+    response = getStatus()
+//log.trace "response $response.data"
+    if(response?.data && response?.data != []){
+    	def data = response.data
+            log.trace "response $response.data"
+    }
+*/
+
 }
 
 def stop() {
@@ -478,9 +514,6 @@ def previousGenre() {
     runIn(5, updateStatus)
 }
 
-
-
-
 def tileSetLevel(val)
 {
 	setLocalLevel(val)
@@ -493,7 +526,7 @@ def setLocalLevel(val) {
 def setLevel(val)
 {
 	def v = Math.max(Math.min(Math.round(val), 100), 0)
-    setCommand('{"type":"VolumeLevelCommand","volumeLevel":'+v+'}')
+    setCommand('{"type":"VolumeLevelCommand","volumeLevel":'+v+',"contentFocusClientId":null}')
     runIn(2, updateStatus)
 }
 
@@ -511,15 +544,14 @@ def unmute()
 def playTextAndResume(text, volume=null){
 	if (volume){
     
-}
-   
-    
-def sound = textToSpeech(text)
+	}
+	def sound = textToSpeech(text)
 	playByMode(sound.uri, Math.max((sound.duration as Integer),1), volume, null, 1)
 }
 
 
 def playText(msg){
+	log.trace "playText($msg)"
     def params = [
         uri: parent.state.domain + "/api/behaviors/preview",
         headers:[
@@ -532,11 +564,28 @@ def playText(msg){
 }
 
 
-def speak(String msg){
-	playText(msg)
+def speak(String msg, Integer volume = null, Integer delay=null){
+	log.trace "speak($msg, $volume, $delay)"
+    def currentVolume
+    def response = playText(msg)
+    if (volume){
+    	volume = Math.max(Math.min(Math.round(volume), 100), 0)
+    	currentVolume = device.currentState("level")?.integerValue
+    	if (currentVolume != volume && volume > 0){
+            setCommand('{"type":"VolumeLevelCommand","volumeLevel":'+volume+',"contentFocusClientId":null}')
+        	delay = delay ? Math.max(delay,2) :  Math.max(Math.round(msg.length()/19),2) 
+        }else{volume = null}
+    }
+	if (volume) runIn(delay,  "executeFunction", [data: [function: "setCommand" , parametrs: '{"type":"VolumeLevelCommand","volumeLevel":'+currentVolume+',"contentFocusClientId":null}']])
 }
 
-
+def executeFunction(data){
+    switch(data.function) {
+        case "setCommand":
+			setCommand(data.parametrs)
+            break
+	}
+}
 
 def apiPut(Map params){
 	try{
@@ -563,14 +612,13 @@ def apiGet(Map params){
 
 
 def apiPost(Map params){
-	log.trace "apiPost $params"
     try {
         httpPost(params) { resp ->
             resp
         }
     } catch (e) {
         log.trace "apiPost Error : $e" 
-        null
+		null
     }
 }
 
